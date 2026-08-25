@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AGM 감액량 분석 대시보드</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #d8dee9;
+      --text: #111827;
+      --muted: #5b6475;
+      --blue: #2563eb;
+      --red: #dc2626;
+      --green: #16a34a;
+      --orange-bg: #fff7ed;
+      --red-bg: #fef2f2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Malgun Gothic", "Apple SD Gothic Neo", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      letter-spacing: 0;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+    }
+
+    aside {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow: auto;
+      padding: 18px;
+      background: #1f2937;
+      color: #f9fafb;
+      border-right: 1px solid #111827;
+    }
+
+    main {
+      padding: 24px;
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      line-height: 1.25;
+    }
+
+    h2 {
+      margin: 28px 0 12px;
+      font-size: 19px;
+    }
+
+    h3 {
+      margin: 20px 0 8px;
+      font-size: 15px;
+      color: #e5e7eb;
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input[type="file"],
+    input[type="date"],
+    input[type="number"],
+    input[type="search"],
+    select {
+      width: 100%;
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid #9ca3af;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #111827;
+    }
+
+    select[multiple] {
+      height: 180px;
+    }
+
+    button {
+      min-height: 38px;
+      padding: 8px 12px;
+      border: 1px solid #1d4ed8;
+      border-radius: 6px;
+      background: var(--blue);
+      color: #ffffff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button.secondary {
+      border-color: #9ca3af;
+      background: #ffffff;
+      color: #111827;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .full-button {
+      width: 100%;
+      margin-top: 14px;
+    }
+
+    .note {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    aside .note {
+      color: #d1d5db;
+    }
+
+    .status {
+      min-height: 24px;
+      margin-top: 12px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #d1d5db;
+      white-space: pre-wrap;
+    }
+
+    .alert {
+      padding: 10px 12px;
+      border: 1px solid #f59e0b;
+      background: #fffbeb;
+      color: #78350f;
+      border-radius: 6px;
+      margin: 12px 0;
+    }
+
+    .error {
+      border-color: #dc2626;
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(140px, 1fr));
+      gap: 12px;
+    }
+
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .kpi .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
+
+    .kpi .value {
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      overflow: hidden;
+    }
+
+    .table-wrap {
+      width: 100%;
+      max-height: 520px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      min-width: 760px;
+    }
+
+    th,
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      white-space: nowrap;
+      text-align: left;
+      color: #111827;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f3f4f6;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    tr.warn-row td {
+      background: var(--orange-bg);
+    }
+
+    tr.bad-row td {
+      background: var(--red-bg);
+    }
+
+    .downloads {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    #chart {
+      width: 100%;
+      min-height: 540px;
+    }
+
+    details {
+      margin-top: 16px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    summary {
+      cursor: pointer;
+      font-weight: 800;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: relative;
+        height: auto;
+      }
+
+      .kpis {
+        grid-template-columns: repeat(2, minmax(140px, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h3>파일 업로드</h3>
+      <label for="backFile">백데이터 Excel</label>
+      <input id="backFile" type="file" accept=".xlsx,.xlsm,.xls">
+
+      <label for="backSheet">백데이터 시트</label>
+      <select id="backSheet" disabled></select>
+
+      <label for="standardFile">기준값 Excel 선택</label>
+      <input id="standardFile" type="file" accept=".xlsx,.xlsm,.xls">
+
+      <label for="standardSheet">기준값 시트</label>
+      <select id="standardSheet" disabled></select>
+
+      <h3>읽기 설정</h3>
+      <label for="startRow">백데이터 시작 행</label>
+      <input id="startRow" type="number" min="1" max="50" value="5">
+
+      <p class="note">
+        백데이터: BG열 날짜, B열 시리얼넘버, D열 형명, BQ열 감액량<br>
+        기준값: A열 형명, E열 UCL, F열 중심치, G열 LCL
+      </p>
+
+      <label for="denominatorOption">부적합률 계산 기준</label>
+      <select id="denominatorOption">
+        <option value="specOnly" selected>기준값이 있는 데이터만 판정 대상에 포함</option>
+        <option value="includeNoSpec">기준값 없는 데이터도 총 댓수에 포함</option>
+      </select>
+
+      <label for="graphMode">그래프 모드</label>
+      <select id="graphMode">
+        <option value="distribution" selected>형명별 분포 그래프</option>
+        <option value="trend">날짜 추이 그래프</option>
+      </select>
+
+      <h3>조회 필터</h3>
+      <label for="startDate">시작일</label>
+      <input id="startDate" type="date">
+      <label for="endDate">종료일</label>
+      <input id="endDate" type="date">
+
+      <label for="modelSearch">제품 형명 검색</label>
+      <input id="modelSearch" type="search" placeholder="형명 검색">
+      <label for="modelSelect">제품 형명 선택</label>
+      <select id="modelSelect" multiple></select>
+      <div class="button-row">
+        <button id="selectAllModels" type="button" class="secondary">전체 선택</button>
+        <button id="clearModels" type="button" class="secondary">선택 해제</button>
+      </div>
+
+      <button id="analyzeButton" class="full-button" type="button">분석 실행</button>
+      <div id="status" class="status"></div>
+    </aside>
+
+    <main>
+      <h1>AGM 감액량 분석 대시보드</h1>
+      <p class="note">
+        감액량이 LCL 미만 또는 UCL 초과이면 부적합으로 판정합니다. D열 형명이 비어 있으면 B열 시리얼넘버로 보정 형명을 자동 생성합니다.
+      </p>
+
+      <div id="messageArea"></div>
+
+      <h2>전체 KPI</h2>
+      <div class="kpis" id="kpiArea"></div>
+
+      <h2>제품 형명별 요약표</h2>
+      <div class="section">
+        <div class="table-wrap" id="summaryTable"></div>
+        <div class="downloads">
+          <button id="downloadSummary" type="button">형명별 요약 Excel 다운로드</button>
+          <button id="downloadFiltered" type="button">필터 데이터 Excel 다운로드</button>
+        </div>
+      </div>
+
+      <h2>감액량 분석 그래프</h2>
+      <div class="section">
+        <div id="chart"></div>
+        <div class="downloads">
+          <button id="downloadGraphData" type="button">그래프 데이터 Excel 다운로드</button>
+        </div>
+      </div>
+
+      <h2>부적합 데이터 상세 목록</h2>
+      <div class="section">
+        <div class="table-wrap" id="defectTable"></div>
+        <div class="downloads">
+          <button id="downloadDefects" type="button">부적합 상세 Excel 다운로드</button>
+        </div>
+      </div>
+
+      <details>
+        <summary>제외 데이터 확인</summary>
+        <h2>형명 생성 실패</h2>
+        <div class="table-wrap" id="modelFailTable"></div>
+        <h2>감액량 변환 실패</h2>
+        <div class="table-wrap" id="lossFailTable"></div>
+        <h2>날짜 변환 실패</h2>
+        <div class="table-wrap" id="dateFailTable"></div>
+        <h2>기준값 없는 데이터</h2>
+        <div class="table-wrap" id="noSpecTable"></div>
+      </details>
+    </main>
+  </div>
+
+  <script>
+    const FIXED = {
+      date: 58,
+      serial: 1,
+      model: 3,
+      reduction: 68
+    };
+
+    const STANDARD = {
+      model: 0,
+      ucl: 4,
+      center: 5,
+      lcl: 6
+    };
+
+    const STANDARD_SHEETS = new Set(["기준정보", "기준", "spec", "master"]);
+    const COLORS = {
+      "합격": "#2563eb",
+      "부적합": "#dc2626",
+      "판정 제외": "#737373"
+    };
+
+    const state = {
+      backWorkbook: null,
+      standardWorkbook: null,
+      processedRows: [],
+      judgedRows: [],
+      analysisRows: [],
+      filteredRows: [],
+      summaryRows: [],
+      defects: [],
+      graphRows: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(message) {
+      $("status").textContent = message || "";
+    }
+
+    function setMessages(messages, type = "alert") {
+      const area = $("messageArea");
+      area.innerHTML = "";
+      messages.filter(Boolean).forEach((message) => {
+        const div = document.createElement("div");
+        div.className = type;
+        div.textContent = message;
+        area.appendChild(div);
+      });
+    }
+
+    function cleanText(value) {
+      if (value === null || value === undefined) return "";
+      const text = String(value).trim();
+      if (["nan", "none", "nat", "null"].includes(text.toLowerCase())) return "";
+      return text.replace(/\s+/g, " ");
+    }
+
+    function isBlank(value) {
+      return cleanText(value) === "";
+    }
+
+    function parseNumber(value) {
+      if (value === null || value === undefined || value === "") return NaN;
+      if (typeof value === "number") return Number.isFinite(value) ? value : NaN;
+      const text = String(value).trim().replace(/,/g, "");
+      if (text === "" || text === "-") return NaN;
+      const num = Number(text);
+      return Number.isFinite(num) ? num : NaN;
+    }
+
+    function excelDateToDate(serial) {
+      const epoch = Date.UTC(1899, 11, 30);
+      return new Date(epoch + Number(serial) * 86400000);
+    }
+
+    function parseDate(value) {
+      if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+      if (typeof value === "number" && Number.isFinite(value) && value >= 1 && value <= 80000) {
+        return excelDateToDate(value);
+      }
+      if (isBlank(value)) return null;
+      const text = String(value).trim();
+      const numeric = Number(text.replace(/,/g, ""));
+      if (Number.isFinite(numeric) && numeric >= 1 && numeric <= 80000) return excelDateToDate(numeric);
+      const parsed = new Date(text);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    function formatDate(date) {
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function formatNumber(value, digits = 3) {
+      return Number.isFinite(value) ? Number(value).toFixed(digits) : "";
+    }
+
+    function round3(value) {
+      return Number.isFinite(value) ? Math.round(value * 1000) / 1000 : null;
+    }
+
+    function readWorkbook(file) {
+      return file.arrayBuffer().then((buffer) => XLSX.read(buffer, { type: "array", cellDates: true }));
+    }
+
+    function sheetToRows(workbook, sheetName) {
+      const sheet = workbook.Sheets[sheetName];
+      return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+    }
+
+    function populateSheetSelect(select, workbook, preferDataSheet) {
+      select.innerHTML = "";
+      const names = workbook ? workbook.SheetNames : [];
+      names.forEach((name) => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        select.appendChild(option);
+      });
+      if (preferDataSheet) {
+        const index = names.findIndex((name) => !STANDARD_SHEETS.has(name.toLowerCase()) && !STANDARD_SHEETS.has(name));
+        if (index >= 0) select.selectedIndex = index;
+      }
+      select.disabled = names.length === 0;
+    }
+
+    function findStandardSheet(workbook) {
+      if (!workbook) return null;
+      return workbook.SheetNames.find((name) => STANDARD_SHEETS.has(name) || STANDARD_SHEETS.has(name.toLowerCase())) || null;
+    }
+
+    function generateModelFromSerial(serial) {
+      const text = cleanText(serial);
+      if (!text) return { model: "", method: "생성 실패", error: "시리얼넘버 없음" };
+      if (text.length < 4) return { model: "", method: "생성 실패", error: "시리얼넘버 길이 부족" };
+      const prefix = text.slice(0, 3);
+      if (!/^\d{3}$/.test(prefix)) return { model: "", method: "생성 실패", error: "앞 3자리 숫자 아님" };
+      const fourth = text.charAt(3).toUpperCase();
+      const suffix = fourth === "A" ? "1" : fourth === "C" ? "3" : "";
+      if (!suffix) return { model: "", method: "생성 실패", error: "네 번째 문자가 A/C 아님" };
+      const secondFromEnd = text.charAt(text.length - 2).toUpperCase();
+      return { model: `AGM${Number(prefix)}_${secondFromEnd}${suffix}`, method: "시리얼넘버 자동 생성", error: "" };
+    }
+
+    function parseBackData() {
+      if (!state.backWorkbook) throw new Error("백데이터 Excel 파일을 업로드해 주세요.");
+      const sheetName = $("backSheet").value || state.backWorkbook.SheetNames[0];
+      const rows = sheetToRows(state.backWorkbook, sheetName);
+      const startIndex = Math.max(Number($("startRow").value || 5) - 1, 0);
+      const dataRows = rows.slice(startIndex);
+      const maxCols = Math.max(0, ...dataRows.map((row) => row.length));
+      if (maxCols <= FIXED.reduction) throw new Error("백데이터에 BQ열 감액량 데이터가 없습니다.");
+
+      return dataRows
+        .filter((row) => row.some((value) => !isBlank(value)))
+        .map((row, index) => {
+          const dateRaw = row[FIXED.date];
+          const serial = cleanText(row[FIXED.serial]);
+          const originalModel = cleanText(row[FIXED.model]);
+          const reductionRaw = row[FIXED.reduction];
+          let correctedModel = originalModel;
+          let method = "D열 사용";
+          let modelError = "";
+
+          if (isBlank(originalModel)) {
+            const generated = generateModelFromSerial(serial);
+            correctedModel = generated.model;
+            method = generated.method;
+            modelError = generated.error;
+          }
+
+          const date = parseDate(dateRaw);
+          const loss = parseNumber(reductionRaw);
+
+          return {
+            rowNo: startIndex + index + 1,
+            dateRaw,
+            date,
+            serial,
+            originalModel,
+            correctedModel,
+            productModel: correctedModel,
+            modelMethod: method,
+            modelError,
+            modelFail: method === "생성 실패",
+            reductionRaw,
+            loss,
+            lossFail: !Number.isFinite(loss),
+            dateFail: !date,
+          };
+        });
+    }
+
+    function parseStandardData() {
+      let workbook = state.standardWorkbook;
+      let sheetName = $("standardSheet").value;
+      let source = "별도 기준값 파일";
+
+      if (!workbook) {
+        const embeddedSheet = findStandardSheet(state.backWorkbook);
+        if (embeddedSheet) {
+          workbook = state.backWorkbook;
+          sheetName = embeddedSheet;
+          source = `백데이터 내 '${embeddedSheet}' 시트`;
+        }
+      }
+
+      if (!workbook || !sheetName) {
+        return { rows: [], source: "기준값 없음" };
+      }
+
+      const rows = sheetToRows(workbook, sheetName);
+      const standards = [];
+      rows.forEach((row) => {
+        const model = cleanText(row[STANDARD.model]);
+        if (!model) return;
+        const ucl = parseNumber(row[STANDARD.ucl]);
+        const center = parseNumber(row[STANDARD.center]);
+        const lcl = parseNumber(row[STANDARD.lcl]);
+        if (!Number.isFinite(ucl) && !Number.isFinite(center) && !Number.isFinite(lcl)) return;
+        standards.push({
+          productModel: model,
+          center,
+          ucl,
+          lcl,
+          hasStandard: true,
+          missingLimit: !Number.isFinite(ucl) || !Number.isFinite(lcl),
+          invalidRange: Number.isFinite(ucl) && Number.isFinite(lcl) && lcl > ucl
+        });
+      });
+
+      return { rows: standards, source };
+    }
+
+    function mergeAndJudge(processedRows, standardRows) {
+      const standardMap = new Map();
+      const duplicateModels = new Set();
+
+      standardRows.forEach((row) => {
+        if (standardMap.has(row.productModel)) duplicateModels.add(row.productModel);
+        standardMap.set(row.productModel, row);
+      });
+
+      if (duplicateModels.size > 0) {
+        throw new Error(`동일한 제품 형명 기준값이 중복 등록되어 있습니다: ${Array.from(duplicateModels).sort().join(", ")}`);
+      }
+
+      return processedRows.map((row) => {
+        const standard = standardMap.get(row.productModel);
+        const merged = {
+          ...row,
+          center: standard ? standard.center : NaN,
+          ucl: standard ? standard.ucl : NaN,
+          lcl: standard ? standard.lcl : NaN,
+          hasStandard: Boolean(standard),
+          missingLimit: standard ? standard.missingLimit : false,
+          invalidRange: standard ? standard.invalidRange : false,
+        };
+
+        merged.judgeable = !merged.modelFail &&
+          !merged.lossFail &&
+          !merged.dateFail &&
+          merged.hasStandard &&
+          !merged.missingLimit &&
+          !merged.invalidRange;
+
+        merged.result = "판정 제외";
+        merged.direction = "";
+        merged.excludeReason = "";
+
+        if (merged.judgeable) {
+          if (merged.loss < merged.lcl) {
+            merged.result = "부적합";
+            merged.direction = "하한 미달";
+          } else if (merged.loss > merged.ucl) {
+            merged.result = "부적합";
+            merged.direction = "상한 초과";
+          } else {
+            merged.result = "합격";
+          }
+        } else if (merged.modelFail) {
+          merged.excludeReason = "형명 생성 실패";
+        } else if (merged.dateFail) {
+          merged.excludeReason = "날짜 변환 실패";
+        } else if (merged.lossFail) {
+          merged.excludeReason = "감액량 변환 실패";
+        } else if (!merged.hasStandard) {
+          merged.excludeReason = "기준값 없음";
+        } else if (merged.missingLimit) {
+          merged.excludeReason = "UCL/LCL 누락";
+        } else if (merged.invalidRange) {
+          merged.excludeReason = "LCL>UCL 오류";
+        }
+
+        return merged;
+      });
+    }
+
+    function analysisRows(rows) {
+      return rows.filter((row) => !row.modelFail && !row.lossFail && !row.dateFail);
+    }
+
+    function selectedModels() {
+      return Array.from($("modelSelect").selectedOptions).map((option) => option.value);
+    }
+
+    function applyFilters() {
+      const start = $("startDate").value ? new Date(`${$("startDate").value}T00:00:00`) : null;
+      const end = $("endDate").value ? new Date(`${$("endDate").value}T23:59:59`) : null;
+      const models = new Set(selectedModels());
+      state.filteredRows = state.analysisRows.filter((row) => {
+        if (start && row.date < start) return false;
+        if (end && row.date > end) return false;
+        return models.size === 0 ? false : models.has(row.productModel);
+      });
+      renderAll();
+    }
+
+    function denominatorRows(rows) {
+      const mode = $("denominatorOption").value;
+      if (mode === "specOnly") return rows.filter((row) => row.judgeable);
+      return rows.filter((row) => !row.modelFail && !row.lossFail && !row.dateFail);
+    }
+
+    function makeKpi(rows) {
+      const denominator = denominatorRows(rows);
+      const total = denominator.length;
+      const fail = rows.filter((row) => row.result === "부적합").length;
+      const pass = rows.filter((row) => row.result === "합격").length;
+      const rate = total ? fail / total * 100 : NaN;
+      const avg = total ? denominator.reduce((sum, row) => sum + row.loss, 0) / total : NaN;
+      return { total, fail, pass, rate, avg, excluded: rows.filter((row) => row.result === "판정 제외").length };
+    }
+
+    function makeSummary(rows) {
+      const groups = new Map();
+      rows.forEach((row) => {
+        if (!groups.has(row.productModel)) groups.set(row.productModel, []);
+        groups.get(row.productModel).push(row);
+      });
+
+      const denominatorSet = new Set(denominatorRows(rows));
+      const summary = Array.from(groups.entries()).map(([model, group]) => {
+        const denom = group.filter((row) => denominatorSet.has(row));
+        const losses = group.map((row) => row.loss).filter(Number.isFinite);
+        const fail = group.filter((row) => row.result === "부적합").length;
+        const pass = group.filter((row) => row.result === "합격").length;
+        const excluded = group.filter((row) => row.result === "판정 제외").length;
+        const mean = losses.length ? losses.reduce((sum, value) => sum + value, 0) / losses.length : NaN;
+        const variance = losses.length > 1
+          ? losses.reduce((sum, value) => sum + Math.pow(value - mean, 2), 0) / (losses.length - 1)
+          : 0;
+        const standardRow = group.find((row) => row.hasStandard);
+        let status = "정상";
+        if (!group.some((row) => row.hasStandard)) status = "기준값 없음";
+        else if (group.some((row) => row.invalidRange)) status = "LCL>UCL 오류";
+        else if (group.some((row) => row.missingLimit)) status = "UCL/LCL 누락";
+
+        return {
+          "제품 형명": model,
+          "총 댓수": denom.length,
+          "합격 수량": pass,
+          "부적합 수량": fail,
+          "부적합률": denom.length ? fail / denom.length * 100 : NaN,
+          "평균 감액량": mean,
+          "최소 감액량": losses.length ? Math.min(...losses) : NaN,
+          "최대 감액량": losses.length ? Math.max(...losses) : NaN,
+          "표준편차": Math.sqrt(variance),
+          "중심치": standardRow ? standardRow.center : NaN,
+          "UCL": standardRow ? standardRow.ucl : NaN,
+          "LCL": standardRow ? standardRow.lcl : NaN,
+          "판정 제외 수": excluded,
+          "전체 데이터 수": group.length,
+          "기준 상태": status,
+        };
+      });
+
+      summary.sort((a, b) => {
+        const ar = Number.isFinite(a["부적합률"]) ? a["부적합률"] : -1;
+        const br = Number.isFinite(b["부적합률"]) ? b["부적합률"] : -1;
+        return br - ar || b["부적합 수량"] - a["부적합 수량"];
+      });
+      return summary;
+    }
+
+    function makeDefects(rows) {
+      return rows
+        .filter((row) => row.result === "부적합")
+        .map((row) => ({
+          "날짜": formatDate(row.date),
+          "제품 형명": row.productModel,
+          "감액량": round3(row.loss),
+          "LCL": round3(row.lcl),
+          "UCL": round3(row.ucl),
+          "중심치": round3(row.center),
+          "판정 결과": row.result,
+          "이탈 방향": row.direction
+        }));
+    }
+
+    function makeGraphData(rows) {
+      return rows
+        .filter((row) => Number.isFinite(row.loss) && row.date && row.productModel)
+        .sort((a, b) => cleanText(a.serial).localeCompare(cleanText(b.serial), "ko") || a.date - b.date)
+        .map((row) => ({
+          "날짜": formatDate(row.date),
+          "시리얼넘버": row.serial,
+          "제품 형명": row.productModel,
+          "감액량": round3(row.loss),
+          "LCL": round3(row.lcl),
+          "중심치": round3(row.center),
+          "UCL": round3(row.ucl),
+          "판정 결과": row.result,
+          "이탈 방향": row.direction
+        }));
+    }
+
+    function makeFilteredExport(rows) {
+      return rows.map((row) => ({
+        "날짜": formatDate(row.date),
+        "시리얼넘버": row.serial,
+        "원본 형명": row.originalModel,
+        "보정 형명": row.correctedModel,
+        "형명 생성 방식": row.modelMethod,
+        "원본 감액량": row.reductionRaw,
+        "감액량": round3(row.loss),
+        "중심치": round3(row.center),
+        "UCL": round3(row.ucl),
+        "LCL": round3(row.lcl),
+        "판정 결과": row.result,
+        "이탈 방향": row.direction,
+        "판정 제외 사유": row.excludeReason
+      }));
+    }
+
+    function renderKpi(kpi) {
+      const items = [
+        ["전체 총 댓수", kpi.total.toLocaleString("ko-KR")],
+        ["전체 부적합 수량", kpi.fail.toLocaleString("ko-KR")],
+        ["전체 합격 수량", kpi.pass.toLocaleString("ko-KR")],
+        ["전체 부적합률", Number.isFinite(kpi.rate) ? `${kpi.rate.toFixed(2)}%` : "-"],
+        ["전체 평균 감액량", formatNumber(kpi.avg, 3) || "-"]
+      ];
+      $("kpiArea").innerHTML = items.map(([label, value]) => `
+        <div class="kpi">
+          <div class="label">${label}</div>
+          <div class="value">${value}</div>
+        </div>
+      `).join("");
+    }
+
+    function renderTable(containerId, rows, columns, rowClass) {
+      const container = $(containerId);
+      if (!rows || rows.length === 0) {
+        container.innerHTML = "<table><tbody><tr><td>조회 결과 없음</td></tr></tbody></table>";
+        return;
+      }
+      const headers = columns || Object.keys(rows[0]);
+      const html = [
+        "<table><thead><tr>",
+        ...headers.map((header) => `<th>${header}</th>`),
+        "</tr></thead><tbody>",
+        ...rows.map((row) => {
+          const klass = rowClass ? rowClass(row) : "";
+          return `<tr class="${klass}">${headers.map((header) => `<td>${formatCell(row[header], header)}</td>`).join("")}</tr>`;
+        }),
+        "</tbody></table>"
+      ].join("");
+      container.innerHTML = html;
+    }
+
+    function formatCell(value, header) {
+      if (value === null || value === undefined || Number.isNaN(value)) return "";
+      if (header.includes("률")) return Number.isFinite(value) ? `${Number(value).toFixed(2)}%` : "";
+      if (["감액량", "평균 감액량", "최소 감액량", "최대 감액량", "표준편차", "중심치", "UCL", "LCL"].includes(header)) {
+        return Number.isFinite(value) ? Number(value).toFixed(3) : "";
+      }
+      return String(value);
+    }
+
+    function renderDistribution(rows) {
+      const models = Array.from(new Set(rows.map((row) => row.productModel))).sort();
+      const modelIndex = new Map(models.map((model, index) => [model, index]));
+      const traces = [];
+
+      ["합격", "부적합", "판정 제외"].forEach((result) => {
+        const resultRows = rows.filter((row) => row.result === result);
+        if (resultRows.length === 0) return;
+        traces.push({
+          type: "scatter",
+          mode: "markers",
+          name: result,
+          x: resultRows.map((row, idx) => modelIndex.get(row.productModel) + (((idx * 37) % 100) / 100 - 0.5) * 0.42),
+          y: resultRows.map((row) => row.loss),
+          marker: { color: COLORS[result], size: result === "부적합" ? 10 : 8, symbol: result === "부적합" ? "x" : "circle" },
+          customdata: resultRows.map((row) => [formatDate(row.date), row.serial, row.productModel, round3(row.loss), row.result, row.direction || "-"]),
+          hovertemplate: "날짜: %{customdata[0]}<br>시리얼넘버: %{customdata[1]}<br>제품 형명: %{customdata[2]}<br>감액량: %{customdata[3]}<br>판정 결과: %{customdata[4]}<br>이탈 방향: %{customdata[5]}<extra></extra>"
+        });
+      });
+
+      const shown = new Set();
+      models.forEach((model) => {
+        const row = rows.find((item) => item.productModel === model && item.hasStandard);
+        if (!row) return;
+        const x = modelIndex.get(model);
+        [
+          ["UCL", row.ucl, "#ef4444", "dash"],
+          ["LCL", row.lcl, "#ef4444", "dash"],
+          ["중심치", row.center, "#16a34a", "dot"]
+        ].forEach(([name, value, color, dash]) => {
+          if (!Number.isFinite(value)) return;
+          traces.push({
+            type: "scatter",
+            mode: "lines",
+            name,
+            showlegend: !shown.has(name),
+            x: [x - 0.35, x + 0.35],
+            y: [value, value],
+            line: { color, width: 2, dash },
+            hoverinfo: "skip"
+          });
+          shown.add(name);
+        });
+      });
+
+      Plotly.newPlot("chart", traces, {
+        title: "형명별 감액량 분포",
+        xaxis: { title: "제품 형명", tickmode: "array", tickvals: models.map((_, index) => index), ticktext: models },
+        yaxis: { title: "감액량" },
+        height: 560,
+        margin: { l: 52, r: 24, t: 62, b: 92 },
+        template: "plotly_white",
+        legend: { orientation: "h" }
+      }, { responsive: true });
+    }
+
+    function renderTrend(rows) {
+      const models = Array.from(new Set(rows.map((row) => row.productModel))).sort();
+      const traces = [];
+      const layout = {
+        title: models.length === 1 ? `${models[0]} 날짜별 감액량 추이` : "날짜별 감액량 추이",
+        height: Math.max(540, models.length * 260),
+        margin: { l: 64, r: 24, t: 72, b: 64 },
+        template: "plotly_white",
+        legend: { orientation: "h" }
+      };
+      const shown = new Set();
+
+      models.forEach((model, index) => {
+        const modelRows = rows.filter((row) => row.productModel === model).sort((a, b) => a.date - b.date);
+        const suffix = index === 0 ? "" : String(index + 1);
+        const xaxis = `x${suffix}`;
+        const yaxis = `y${suffix}`;
+        const top = 1 - index / models.length;
+        const bottom = 1 - (index + 1) / models.length + 0.03;
+        layout[`xaxis${suffix}`] = { title: index === models.length - 1 ? "날짜" : "", anchor: yaxis, domain: [0, 1] };
+        layout[`yaxis${suffix}`] = { title: model, anchor: xaxis, domain: [Math.max(0, bottom), Math.min(1, top - 0.03)] };
+
+        ["합격", "부적합", "판정 제외"].forEach((result) => {
+          const resultRows = modelRows.filter((row) => row.result === result);
+          if (resultRows.length === 0) return;
+          traces.push({
+            type: "scatter",
+            mode: "markers+lines",
+            name: result,
+            showlegend: !shown.has(result),
+            xaxis,
+            yaxis,
+            x: resultRows.map((row) => formatDate(row.date)),
+            y: resultRows.map((row) => row.loss),
+            line: { color: COLORS[result], width: 1.2 },
+            marker: { color: COLORS[result], size: result === "부적합" ? 10 : 7, symbol: result === "부적합" ? "x" : "circle" },
+            customdata: resultRows.map((row) => [formatDate(row.date), row.serial, row.productModel, round3(row.loss), row.result, row.direction || "-"]),
+            hovertemplate: "날짜: %{customdata[0]}<br>시리얼넘버: %{customdata[1]}<br>제품 형명: %{customdata[2]}<br>감액량: %{customdata[3]}<br>판정 결과: %{customdata[4]}<br>이탈 방향: %{customdata[5]}<extra></extra>"
+          });
+          shown.add(result);
+        });
+
+        const standard = modelRows.find((row) => row.hasStandard);
+        if (standard) {
+          const xs = modelRows.map((row) => formatDate(row.date));
+          const xStart = xs[0];
+          const xEnd = xs[xs.length - 1];
+          [
+            ["UCL", standard.ucl, "#ef4444", "dash"],
+            ["LCL", standard.lcl, "#ef4444", "dash"],
+            ["중심치", standard.center, "#16a34a", "dot"]
+          ].forEach(([name, value, color, dash]) => {
+            if (!Number.isFinite(value)) return;
+            traces.push({
+              type: "scatter",
+              mode: "lines",
+              name,
+              showlegend: !shown.has(name),
+              xaxis,
+              yaxis,
+              x: [xStart, xEnd],
+              y: [value, value],
+              line: { color, width: 2, dash },
+              hoverinfo: "skip"
+            });
+            shown.add(name);
+          });
+        }
+      });
+
+      Plotly.newPlot("chart", traces, layout, { responsive: true });
+    }
+
+    function renderChart(rows) {
+      if (rows.length === 0) {
+        Plotly.newPlot("chart", [], { title: "그래프에 표시할 데이터가 없습니다." }, { responsive: true });
+        return;
+      }
+      if ($("graphMode").value === "trend") renderTrend(rows);
+      else renderDistribution(rows);
+    }
+
+    function downloadWorkbook(fileName, rows, sheetName) {
+      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+      XLSX.writeFile(workbook, fileName);
+    }
+
+    function setupModelFilter(rows) {
+      const models = Array.from(new Set(rows.map((row) => row.productModel))).sort();
+      const select = $("modelSelect");
+      select.innerHTML = "";
+      models.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model;
+        option.textContent = model;
+        option.selected = true;
+        select.appendChild(option);
+      });
+    }
+
+    function filterModelOptions() {
+      const keyword = $("modelSearch").value.trim().toLowerCase();
+      Array.from($("modelSelect").options).forEach((option) => {
+        option.hidden = keyword && !option.value.toLowerCase().includes(keyword);
+      });
+    }
+
+    function setupDateFilter(rows) {
+      const dates = rows.map((row) => row.date).filter(Boolean).sort((a, b) => a - b);
+      if (dates.length === 0) return;
+      $("startDate").value = formatDate(dates[0]);
+      $("endDate").value = formatDate(dates[dates.length - 1]);
+    }
+
+    function renderExcluded() {
+      const modelFails = state.processedRows.filter((row) => row.modelFail).map((row) => ({
+        "날짜 원본": row.dateRaw,
+        "시리얼넘버": row.serial,
+        "원본 형명": row.originalModel,
+        "원본 감액량": row.reductionRaw,
+        "형명 생성 오류": row.modelError,
+        "형명 생성 방식": row.modelMethod
+      }));
+      const lossFails = state.processedRows.filter((row) => row.lossFail).map((row) => ({
+        "날짜 원본": row.dateRaw,
+        "시리얼넘버": row.serial,
+        "원본 형명": row.originalModel,
+        "보정 형명": row.correctedModel,
+        "원본 감액량": row.reductionRaw
+      }));
+      const dateFails = state.processedRows.filter((row) => row.dateFail).map((row) => ({
+        "날짜 원본": row.dateRaw,
+        "시리얼넘버": row.serial,
+        "원본 형명": row.originalModel,
+        "보정 형명": row.correctedModel,
+        "원본 감액량": row.reductionRaw
+      }));
+      const noSpec = state.filteredRows.filter((row) => !row.hasStandard).map((row) => ({
+        "날짜": formatDate(row.date),
+        "시리얼넘버": row.serial,
+        "보정 형명": row.correctedModel,
+        "감액량": round3(row.loss),
+        "판정 제외 사유": row.excludeReason
+      }));
+
+      renderTable("modelFailTable", modelFails);
+      renderTable("lossFailTable", lossFails);
+      renderTable("dateFailTable", dateFails);
+      renderTable("noSpecTable", noSpec);
+    }
+
+    function renderAll() {
+      const rows = state.filteredRows;
+      const messages = [];
+      if (rows.length === 0) messages.push("조회 결과 없음");
+      const noSpecModels = Array.from(new Set(rows.filter((row) => !row.hasStandard).map((row) => row.productModel))).sort();
+      if (noSpecModels.length) messages.push(`기준값이 없는 제품 형명: ${noSpecModels.join(", ")}`);
+      setMessages(messages);
+
+      const kpi = makeKpi(rows);
+      state.summaryRows = makeSummary(rows);
+      state.defects = makeDefects(rows);
+      state.graphRows = makeGraphData(rows);
+
+      renderKpi(kpi);
+      renderTable("summaryTable", state.summaryRows, null, (row) => {
+        if (row["기준 상태"] !== "정상") return "warn-row";
+        if (Number.isFinite(row["부적합률"]) && row["부적합률"] >= 5) return "bad-row";
+        if (Number.isFinite(row["부적합률"]) && row["부적합률"] >= 1) return "warn-row";
+        return "";
+      });
+      renderChart(rows);
+      renderTable("defectTable", state.defects);
+      renderExcluded();
+    }
+
+    async function analyze() {
+      try {
+        setStatus("분석 중...");
+        setMessages([]);
+        state.processedRows = parseBackData();
+        const standard = parseStandardData();
+        state.judgedRows = mergeAndJudge(state.processedRows, standard.rows);
+        state.analysisRows = analysisRows(state.judgedRows);
+
+        if (state.analysisRows.length === 0) {
+          setMessages(["전처리 후 분석 가능한 데이터가 없습니다."], "error");
+          setStatus("");
+          return;
+        }
+
+        setupDateFilter(state.analysisRows);
+        setupModelFilter(state.analysisRows);
+        state.filteredRows = state.analysisRows.slice();
+
+        const counts = [
+          `기준값 출처: ${standard.source}`,
+          `분석 가능 데이터: ${state.analysisRows.length.toLocaleString("ko-KR")}건`,
+          `형명 생성 실패: ${state.processedRows.filter((row) => row.modelFail).length.toLocaleString("ko-KR")}건`,
+          `감액량 변환 실패: ${state.processedRows.filter((row) => row.lossFail).length.toLocaleString("ko-KR")}건`,
+          `날짜 변환 실패: ${state.processedRows.filter((row) => row.dateFail).length.toLocaleString("ko-KR")}건`
+        ];
+        setStatus(counts.join("\n"));
+        renderAll();
+      } catch (error) {
+        setMessages([error.message], "error");
+        setStatus("");
+      }
+    }
+
+    $("backFile").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      state.backWorkbook = await readWorkbook(file);
+      populateSheetSelect($("backSheet"), state.backWorkbook, true);
+      setStatus("백데이터 파일을 읽었습니다. 분석 실행을 눌러 주세요.");
+    });
+
+    $("standardFile").addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+      state.standardWorkbook = await readWorkbook(file);
+      populateSheetSelect($("standardSheet"), state.standardWorkbook, false);
+      setStatus("기준값 파일을 읽었습니다. 분석 실행을 눌러 주세요.");
+    });
+
+    $("analyzeButton").addEventListener("click", analyze);
+    $("denominatorOption").addEventListener("change", applyFilters);
+    $("graphMode").addEventListener("change", () => renderChart(state.filteredRows));
+    $("startDate").addEventListener("change", applyFilters);
+    $("endDate").addEventListener("change", applyFilters);
+    $("modelSelect").addEventListener("change", applyFilters);
+    $("modelSearch").addEventListener("input", filterModelOptions);
+    $("selectAllModels").addEventListener("click", () => {
+      Array.from($("modelSelect").options).forEach((option) => { option.selected = true; });
+      applyFilters();
+    });
+    $("clearModels").addEventListener("click", () => {
+      Array.from($("modelSelect").options).forEach((option) => { option.selected = false; });
+      applyFilters();
+    });
+
+    $("downloadSummary").addEventListener("click", () => downloadWorkbook("AGM_감액량_형명별_요약.xlsx", state.summaryRows, "형명별 요약"));
+    $("downloadFiltered").addEventListener("click", () => downloadWorkbook("AGM_감액량_필터데이터.xlsx", makeFilteredExport(state.filteredRows), "필터데이터"));
+    $("downloadGraphData").addEventListener("click", () => downloadWorkbook("AGM_감액량_그래프데이터.xlsx", state.graphRows, "그래프 데이터"));
+    $("downloadDefects").addEventListener("click", () => downloadWorkbook("AGM_감액량_부적합_상세.xlsx", state.defects, "부적합 상세"));
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+[global]
+developmentMode = false
+
+[server]
+headless = true
+address = "localhost"
+fileWatcherType = "none"
+runOnSave = false
+enableWebsocketCompression = false
+websocketPingInterval = 10
+disconnectedSessionTTL = 3600
+
+[browser]
+gatherUsageStats = false
