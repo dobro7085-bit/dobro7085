@@ -943,6 +943,102 @@ def make_trend_chart(df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def make_pass_rate_trend_chart(df: pd.DataFrame) -> go.Figure:
+    """날짜별 합격률(합격 수량 / (합격 + 부적합)) 추이 그래프를 만든다.
+
+    판정 제외 데이터는 합격률 분모에서 제외한다.
+    형명이 하나면 단일 추이선, 여러 개면 형명별 추이선 + 전체 합격률 선을 함께 표시한다.
+    """
+    plot_df = df[
+        df["날짜"].notna()
+        & ~df["제품 형명"].apply(is_blank)
+        & df["판정 결과"].isin(["합격", "부적합"])
+    ].copy()
+
+    fig = go.Figure()
+    if plot_df.empty:
+        fig.add_annotation(text="합격률을 계산할 판정 데이터가 없습니다.", x=0.5, y=0.5, showarrow=False)
+        fig.update_layout(
+            title="날짜별 합격률 추이",
+            template="plotly_white",
+            height=540,
+            font=dict(family="Malgun Gothic, Apple SD Gothic Neo, Arial"),
+        )
+        return fig
+
+    plot_df["판정일"] = plot_df["날짜"].dt.date
+
+    def rate_frame(source: pd.DataFrame) -> pd.DataFrame:
+        grouped = source.groupby("판정일")
+        summary = pd.DataFrame(
+            {
+                "합격 수량": grouped.apply(lambda g: int((g["판정 결과"] == "합격").sum())),
+                "판정 대상 수량": grouped.size().astype(int),
+            }
+        ).reset_index()
+        summary["합격률"] = summary["합격 수량"] / summary["판정 대상 수량"] * 100
+        return summary.sort_values("판정일")
+
+    models = sorted(plot_df["제품 형명"].unique())
+
+    if len(models) > 1:
+        overall = rate_frame(plot_df)
+        fig.add_trace(
+            go.Scatter(
+                x=overall["판정일"],
+                y=overall["합격률"],
+                mode="lines+markers",
+                name="전체 합격률",
+                line=dict(color="#111827", width=2.4),
+                marker=dict(color="#111827", size=8),
+                customdata=np.stack([overall["합격 수량"], overall["판정 대상 수량"]], axis=-1),
+                hovertemplate=(
+                    "날짜: %{x}<br>"
+                    "합격률: %{y:.2f}%<br>"
+                    "합격 수량: %{customdata[0]}<br>"
+                    "판정 대상 수량: %{customdata[1]}<extra>전체</extra>"
+                ),
+            )
+        )
+
+    palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"]
+    for index, model in enumerate(models):
+        model_summary = rate_frame(plot_df[plot_df["제품 형명"] == model])
+        color = palette[index % len(palette)]
+        fig.add_trace(
+            go.Scatter(
+                x=model_summary["판정일"],
+                y=model_summary["합격률"],
+                mode="lines+markers",
+                name=model,
+                line=dict(color=color, width=1.6),
+                marker=dict(color=color, size=7),
+                customdata=np.stack(
+                    [model_summary["합격 수량"], model_summary["판정 대상 수량"]], axis=-1
+                ),
+                hovertemplate=(
+                    "날짜: %{x}<br>"
+                    "제품 형명: " + str(model) + "<br>"
+                    "합격률: %{y:.2f}%<br>"
+                    "합격 수량: %{customdata[0]}<br>"
+                    "판정 대상 수량: %{customdata[1]}<extra></extra>"
+                ),
+            )
+        )
+
+    fig.update_layout(
+        title="날짜별 합격률 추이",
+        xaxis=dict(title="날짜"),
+        yaxis=dict(title="합격률 (%)", range=[0, 105], ticksuffix="%"),
+        template="plotly_white",
+        height=540,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        font=dict(family="Malgun Gothic, Apple SD Gothic Neo, Arial"),
+        margin=dict(l=50, r=30, t=90, b=60),
+    )
+    return fig
+
+
 def safe_sheet_name(sheet_name: str) -> str:
     cleaned = re.sub(r"[\[\]:*?/\\]", "_", sheet_name)
     return cleaned[:31] or "Sheet1"
@@ -1119,7 +1215,10 @@ def main() -> None:
         index=0,
     )
 
-    graph_mode = st.sidebar.selectbox("그래프 모드", ["형명별 분포 그래프", "날짜 추이 그래프"])
+    graph_mode = st.sidebar.selectbox(
+        "그래프 모드",
+        ["형명별 분포 그래프", "날짜 추이 그래프", "날짜별 합격률 추이"],
+    )
 
     if backdata_file is None:
         st.info("왼쪽 사이드바에서 백데이터 Excel 파일을 업로드하면 분석을 시작합니다.")
@@ -1371,6 +1470,8 @@ def main() -> None:
         st.subheader("감액량 분석 그래프")
         if graph_mode == "형명별 분포 그래프":
             figure = make_distribution_chart(filtered)
+        elif graph_mode == "날짜별 합격률 추이":
+            figure = make_pass_rate_trend_chart(filtered)
         else:
             figure = make_trend_chart(filtered)
         st.plotly_chart(figure, use_container_width=True)

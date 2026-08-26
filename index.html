@@ -321,6 +321,7 @@
       <select id="graphMode">
         <option value="distribution" selected>형명별 분포 그래프</option>
         <option value="trend">날짜 추이 그래프</option>
+        <option value="passRate">날짜별 합격률 추이</option>
       </select>
 
       <h3>조회 필터</h3>
@@ -1010,8 +1011,80 @@
         Plotly.newPlot("chart", [], { title: "그래프에 표시할 데이터가 없습니다." }, { responsive: true });
         return;
       }
-      if ($("graphMode").value === "trend") renderTrend(rows);
+      const mode = $("graphMode").value;
+      if (mode === "trend") renderTrend(rows);
+      else if (mode === "passRate") renderPassRate(rows);
       else renderDistribution(rows);
+    }
+
+    function renderPassRate(rows) {
+      // 판정 제외는 합격률 분모에서 제외한다. (합격률 = 합격 / (합격 + 부적합) * 100)
+      const judged = rows.filter((row) => row.date && row.productModel && (row.result === "합격" || row.result === "부적합"));
+      if (judged.length === 0) {
+        Plotly.newPlot("chart", [], { title: "합격률을 계산할 판정 데이터가 없습니다." }, { responsive: true });
+        return;
+      }
+
+      const dayKey = (row) => formatDate(row.date);
+
+      const rateSeries = (source) => {
+        const buckets = new Map();
+        source.forEach((row) => {
+          const key = dayKey(row);
+          if (!buckets.has(key)) buckets.set(key, { pass: 0, total: 0 });
+          const bucket = buckets.get(key);
+          bucket.total += 1;
+          if (row.result === "합격") bucket.pass += 1;
+        });
+        return Array.from(buckets.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, b]) => ({ date, pass: b.pass, total: b.total, rate: b.total ? (b.pass / b.total) * 100 : NaN }));
+      };
+
+      const models = Array.from(new Set(judged.map((row) => row.productModel))).sort();
+      const palette = ["#2563eb", "#16a34a", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#db2777", "#65a30d"];
+      const traces = [];
+
+      if (models.length > 1) {
+        const overall = rateSeries(judged);
+        traces.push({
+          type: "scatter",
+          mode: "lines+markers",
+          name: "전체 합격률",
+          x: overall.map((point) => point.date),
+          y: overall.map((point) => point.rate),
+          line: { color: "#111827", width: 2.4 },
+          marker: { color: "#111827", size: 8 },
+          customdata: overall.map((point) => [point.pass, point.total]),
+          hovertemplate: "날짜: %{x}<br>합격률: %{y:.2f}%<br>합격 수량: %{customdata[0]}<br>판정 대상 수량: %{customdata[1]}<extra>전체</extra>"
+        });
+      }
+
+      models.forEach((model, index) => {
+        const series = rateSeries(judged.filter((row) => row.productModel === model));
+        const color = palette[index % palette.length];
+        traces.push({
+          type: "scatter",
+          mode: "lines+markers",
+          name: model,
+          x: series.map((point) => point.date),
+          y: series.map((point) => point.rate),
+          line: { color, width: 1.6 },
+          marker: { color, size: 7 },
+          customdata: series.map((point) => [point.pass, point.total]),
+          hovertemplate: `날짜: %{x}<br>제품 형명: ${model}<br>합격률: %{y:.2f}%<br>합격 수량: %{customdata[0]}<br>판정 대상 수량: %{customdata[1]}<extra></extra>`
+        });
+      });
+
+      Plotly.newPlot("chart", traces, {
+        title: "날짜별 합격률 추이",
+        xaxis: { title: "날짜" },
+        yaxis: { title: "합격률 (%)", range: [0, 105], ticksuffix: "%" },
+        height: 560,
+        margin: { l: 56, r: 24, t: 62, b: 64 },
+        template: "plotly_white",
+        legend: { orientation: "h" }
+      }, { responsive: true });
     }
 
     function downloadWorkbook(fileName, rows, sheetName) {
